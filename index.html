@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>P|P Roast Prep Label</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+ body{font-family:Arial,sans-serif;max-width:760px;margin:20px auto;padding:0 12px;color:#111}
+ fieldset{border:1px solid #bbb;margin:0 0 12px;padding:10px 12px}
+ legend{font-weight:bold}
+ label{display:inline-block;min-width:120px;margin:3px 0}
+ input[type=text],input[type=number],select{padding:4px;font-size:14px}
+ input.w{width:420px}
+ button{padding:8px 14px;font-size:14px;margin:4px 6px 4px 0;cursor:pointer}
+ #warn{color:#b00020;font-weight:bold;white-space:pre-line}
+ #status{color:#555;white-space:pre-line}
+
+ .must{background:rgba(255,152,0,.40)!important}
+ .may{background:rgba(255,235,59,.50)!important}
+ .legend{margin:0 0 12px;padding:8px 12px;border:1px solid #bbb;font-size:13px}
+ .legend span{display:inline-block;padding:2px 8px;margin-right:6px;border:1px solid #999}
+ canvas{border:1px solid #888;background:#fff;image-rendering:pixelated;width:400px}
+</style></head><body>
+<h2>P|P Roast prep label (NIIMBOT B1)</h2>
+<div class="legend"><span class="must">orange</span> fill in every time &nbsp; <span class="may">yellow</span> filled automatically from the sheet, you may edit &nbsp; <span style="background:#fff">white</span> set once (sheet link, tuning)</div>
+
+<fieldset><legend>1. Sheet link (saved in this browser)</legend>
+ <label>Apps Script URL</label><input class="w" type="text" id="url"><br>
+ <label>Token</label><input type="text" id="token"><br>
+ <label>Sheet tab (year)</label><input type="text" id="tab" style="width:80px">
+</fieldset>
+
+<fieldset><legend>2. Label input</legend>
+ <label>Product name</label><input class="w may" type="text" id="product" placeholder="e.g. Espresso MD"><br>
+ <label>PR from</label><input type="number" id="from" class="must"> &nbsp;
+ <label style="min-width:auto">to</label> <input type="number" id="to" class="may"> (empty = single roast)<br>
+ <label>AG (target)</label><input class="w may" type="text" id="ag" value="…….. (  )"> (keep the dots for pencil)<br>
+ <label>Label type</label><select id="ltype" class="may"><option value="1up">T50*30 (50x30 mm)</option><option value="2up">T45*80-90 (45x80 mm, 2 labels on one)</option></select><br>
+ <label>Copies</label><input type="number" id="copies" class="may" value="1" min="1" max="20" style="width:60px">
+ <button id="load">Load from sheet + preview</button>
+</fieldset>
+
+<div id="warn"></div>
+<canvas id="cv" width="384" height="240"></canvas>
+<p>
+ <label style="min-width:auto">Print direction</label>
+ <select id="dir"><option value="auto">auto (printer default)</option><option value="top">top</option><option value="left">left</option></select>
+ <button id="pbt" disabled>Print via Bluetooth</button>
+ <button id="pusb" disabled>Print via USB</button>
+ <label style="min-width:auto">Logo (PNG, once):</label> <input type="file" id="logo" accept="image/*">
+</p>
+<fieldset><legend>Print tuning (saved per computer; margins separately for each label type)</legend>
+ <label style="min-width:auto">Left margin px</label> <input type="number" id="lm" value="30" style="width:60px"> &nbsp;
+ <label style="min-width:auto">Right margin px</label> <input type="number" id="rm" value="4" style="width:60px"> &nbsp;
+ <label style="min-width:auto">Threshold</label> <input type="number" id="thr" value="110" min="40" max="200" style="width:60px"> (lower = thinner) &nbsp;
+ <label style="min-width:auto">Density</label> <input type="number" id="density" value="2" min="1" max="5" style="width:50px">
+</fieldset>
+<div id="status"></div>
+
+<script src="https://unpkg.com/@mmote/niimbluelib@0.49.1/dist/umd/niimbluelib.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const W = 384; // B1 print head = 384 px wide; label 50x30 mm. Layout is drawn in 400x240 space and scaled.
+let L = null, logoImg = null;
+
+// ---- saved settings
+['url','token','tab'].forEach(k => $(k).value = localStorage.getItem('pp_'+k) || (k === 'tab' ? '2026' : ''));
+['url','token','tab'].forEach(k => $(k).addEventListener('change', () => localStorage.setItem('pp_'+k, $(k).value.trim())));
+const savedLogo = localStorage.getItem('pp_logo');
+if (savedLogo) { logoImg = new Image(); logoImg.onload = () => L && render(L); logoImg.src = savedLogo; }
+$('logo').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { localStorage.setItem('pp_logo', r.result); logoImg = new Image();
+    logoImg.onload = () => L && render(L); logoImg.src = r.result; };
+  r.readAsDataURL(f);
+});
+
+// ---- data -> label fields
+const digits = s => { const m = String(s).match(/\d+/); return m ? String(parseInt(m[0], 10)) : ''; };
+function machineShort(s) {
+  const t = String(s).toLowerCase();
+  if (t.includes('santoker')) return 'SANTOKER';
+  if (t.includes('berto')) return 'BERTO';
+  if (t.includes('vnt')) return 'VNT';
+  return String(s).split(' ')[0].toUpperCase();
+}
+function prText(a, b) {
+  if (a === b) return String(a);
+  const sa = String(a), sb = String(b);
+  return sa.slice(0, 2) === sb.slice(0, 2) ? sa + '-' + sb.slice(-2) : sa + '-' + sb;
+}
+function buildLabel(rows, from, to) {
+  const r0 = rows[0], warn = [];
+  const same = k => rows.every(r => r[k] === r0[k]);
+  if (rows.length !== to - from + 1) warn.push('Only ' + rows.length + ' of ' + (to - from + 1) + ' PR numbers found in the sheet.');
+  ['pg','weight','profile','machine','roaster','client','container'].forEach(k => { if (!same(k)) warn.push('Rows differ in: ' + k); });
+  const pb = rows.map(r => digits(r.pb)).find(x => x) || '—';
+  const c = rows.map(r => r.comments.toLowerCase()).join(' ');
+  return {
+    warn,
+    L: {
+      product: $('product').value.trim(),
+      client: r0.client, date: r0.date,
+      pg: digits(r0.pg) || '—', pr: prText(rows[0].pr, rows[rows.length - 1].pr), pb,
+      ag: $('ag').value, roaster: (r0.roaster || '?').trim().charAt(0).toUpperCase(),
+      loc: r0.container, w: rows.length + ' x ' + r0.weight + ' gram',
+      r: machineShort(r0.machine), profile: r0.profile,
+      hand: c.includes('hand'), color: c.includes('color') || c.includes('colour')
+    }
+  };
+}
+
+// ---- drawing
+function render(L) {
+  const two = $('ltype').value === '2up', H = two ? 640 : 240; // 45x80 mm = 360x640 px area; 50x30 mm = 400x240
+  const cv = $('cv'); cv.width = W; cv.height = H;
+  // draw at 3x, then downsample + hard black/white threshold = exactly what gets printed
+  const S = 3, big = document.createElement('canvas'); big.width = W * S; big.height = H * S;
+  const g = big.getContext('2d');
+  const lm = num('lm', 30), rm = num('rm', 4), sx = (W - lm - rm) / 384;
+  g.fillStyle = '#fff'; g.fillRect(0, 0, big.width, big.height);
+  g.setTransform(S * sx, 0, 0, S, S * (lm - 8 * sx), 0); g.fillStyle = '#000'; g.strokeStyle = '#000';
+  const fit = (t, wt, max, min, maxW) => { let s = max; do { g.font = wt + ' ' + s + 'px Arial'; s--; } while (g.measureText(t).width > maxW && s >= min); };
+  const drawOne = () => {
+  // title
+  fit(L.product, 'bold', 28, 12, 384); g.textAlign = 'left'; g.fillText(L.product, 8, 28);
+  fit(L.date, '', 22, 12, 150); const dw = g.measureText(L.date).width;
+  g.textAlign = 'right'; g.fillText(L.date, 392, 56);
+  fit(L.client, '', 22, 12, 384 - dw - 12); g.textAlign = 'left'; g.fillText(L.client, 8, 56);
+  g.fillRect(8, 62, 384, 4);
+  // table 2 x 5
+  const x0 = 8, y0 = 72, cw = 140, rh = 28;
+  g.lineWidth = 2; g.strokeRect(x0, y0, cw * 2, rh * 5);
+  g.beginPath(); g.moveTo(x0 + cw, y0); g.lineTo(x0 + cw, y0 + rh * 5);
+  for (let i = 1; i < 5; i++) { g.moveTo(x0, y0 + rh * i); g.lineTo(x0 + cw * 2, y0 + rh * i); }
+  g.stroke();
+  const left = ['PG: ' + L.pg, 'PR: ' + L.pr, 'PB: ' + L.pb, 'AG: ' + L.ag, 'Roaster: ' + L.roaster];
+  const right = ['Loc: ' + L.loc, 'W: ' + L.w, 'R: ' + L.r, null, 'Pr: ' + L.profile];
+  const cell = (t, cx, row) => { if (t === null) return; fit(t, '', 17, 9, cw - 8); g.textAlign = 'left'; g.fillText(t, cx + 4, y0 + rh * row + 19); };
+  left.forEach((t, i) => cell(t, x0, i)); right.forEach((t, i) => cell(t, x0 + cw, i));
+  // Hand / Color check boxes (row 4, right)
+  const by = y0 + rh * 3, bs = 14; g.font = '15px Arial'; g.textAlign = 'left';
+  const box = (label, x, on) => { g.fillText(label, x, by + 19); const bx = x + g.measureText(label).width + 3, byy = by + 7;
+    g.lineWidth = 2; g.strokeRect(bx, byy, bs, bs);
+    if (on) { g.beginPath(); g.moveTo(bx + 2, byy + 2); g.lineTo(bx + bs - 2, byy + bs - 2); g.moveTo(bx + bs - 2, byy + 2); g.lineTo(bx + 2, byy + bs - 2); g.stroke(); }
+    return bx + bs + 8; };
+  let nx = box('Hand', x0 + cw + 4, L.hand); box('Color', nx, L.color);
+  // logo
+  const lx = 296, ly = 72, lw = 96, lh = 140;
+  if (logoImg && logoImg.complete && logoImg.naturalWidth) {
+    const s = Math.min(lw / logoImg.naturalWidth, lh / logoImg.naturalHeight);
+    const iw = logoImg.naturalWidth * s, ih = logoImg.naturalHeight * s;
+    g.drawImage(logoImg, lx + (lw - iw) / 2, ly + (lh - ih) / 2, iw, ih);
+  } else { g.textAlign = 'center'; g.font = 'bold 36px Arial'; g.fillText('P|P', lx + lw / 2, ly + 70); g.font = '16px Arial'; g.fillText('Coffee', lx + lw / 2, ly + 95); }
+  // footer
+  g.textAlign = 'left'; g.font = '12px Arial'; g.fillText('PT Peach and Panda Group Indonesia', 8, 232);
+  };
+  if (two) { [40, 360].forEach(dy => { g.save(); g.translate(0, dy); drawOne(); g.restore(); });
+    g.save(); g.lineWidth = 2; g.setLineDash([6, 5]); g.beginPath(); g.moveTo(8, 320); g.lineTo(392, 320); g.stroke(); g.restore(); }
+  else drawOne();
+  const f = cv.getContext('2d'); f.fillStyle = '#fff'; f.fillRect(0, 0, W, H);
+  f.imageSmoothingEnabled = true; f.imageSmoothingQuality = 'high'; f.drawImage(big, 0, 0, W, H);
+  const id = f.getImageData(0, 0, W, H), d = id.data, T = num('thr', 110);
+  for (let i = 0; i < d.length; i += 4) { const v = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; d[i] = d[i + 1] = d[i + 2] = v < T ? 0 : 255; d[i + 3] = 255; }
+  f.putImageData(id, 0, 0);
+}
+function num(id, def) { const v = parseFloat($(id).value); return isNaN(v) ? def : v; }
+
+// ---- load
+$('load').onclick = async () => {
+  $('warn').textContent = ''; $('status').textContent = 'Loading...';
+  const from = parseInt($('from').value, 10), to = parseInt($('to').value || $('from').value, 10);
+  if (!from || !to || to < from) { $('status').textContent = 'Enter a valid PR range.'; return; }
+  localStorage.setItem('pp_url', $('url').value.trim()); localStorage.setItem('pp_token', $('token').value.trim()); localStorage.setItem('pp_tab', $('tab').value.trim());
+  try {
+    const res = await fetch($('url').value.trim() + '?token=' + encodeURIComponent($('token').value.trim()) + '&tab=' + encodeURIComponent($('tab').value.trim()) + '&from=' + from + '&to=' + to);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    if (!data.rows.length) throw new Error('No rows found for PR ' + from + '-' + to);
+    // product + target now come from the sheet (still editable on the page)
+    const r0 = data.rows[0], extra = [];
+    if (r0.product) $('product').value = r0.product;
+    if (r0.target) $('ag').value = '…….. (' + r0.target + ')';
+    if (data.missing && data.missing.length) extra.push('Sheet column(s) not found by header name: ' + data.missing.join(', '));
+    if (data.rows.some(r => r.product !== r0.product || r.target !== r0.target)) extra.push('Rows differ in: product/target (first row used)');
+    const b = buildLabel(data.rows, from, to); b.warn.push(...extra); L = b.L; render(L);
+    $('warn').textContent = b.warn.join('\n'); $('status').textContent = 'Loaded ' + data.rows.length + ' roast(s). Check the preview, then print.';
+    $('pbt').disabled = $('pusb').disabled = false;
+  } catch (e) { $('status').textContent = 'Error: ' + e.message; }
+};
+$('ltype').value = localStorage.getItem('pp_ltype') || '1up';
+// margins are stored per label type (the two rolls sit differently in the printer)
+const MARG = { '1up': { lm: 30, rm: 4 }, '2up': { lm: 2, rm: 56 } };
+function loadMargins() { const t = $('ltype').value;
+  ['lm','rm'].forEach(k => { const s = localStorage.getItem('pp_' + k + '_' + t); $(k).value = s !== null ? s : MARG[t][k]; }); }
+loadMargins();
+$('ltype').addEventListener('change', () => { localStorage.setItem('pp_ltype', $('ltype').value); loadMargins(); if (L) render(L); });
+['lm','rm'].forEach(k => $(k).addEventListener('input', () => { localStorage.setItem('pp_' + k + '_' + $('ltype').value, $(k).value); if (L) render(L); }));
+// other tuning fields: restore, save, re-render
+['thr','density'].forEach(k => { const s = localStorage.getItem('pp_'+k); if (s !== null) $(k).value = s;
+  $(k).addEventListener('input', () => { localStorage.setItem('pp_'+k, $(k).value); if (L) render(L); }); });
+// re-render when manual fields change
+['product','ag'].forEach(k => $(k).addEventListener('input', () => { if (L) { L.product = $('product').value.trim(); L.ag = $('ag').value; render(L); } }));
+
+// ---- print
+async function doPrint(mode) {
+  if (!L) return;
+  L.product = $('product').value.trim(); L.ag = $('ag').value; render(L);
+  const copies = Math.max(1, parseInt($('copies').value, 10) || 1);
+  let client;
+  try {
+    $('status').textContent = 'Connecting (' + mode + ')... pick the printer in the browser popup.';
+    client = mode === 'usb' ? new niimbluelib.NiimbotSerialClient() : new niimbluelib.NiimbotBluetoothClient();
+    await client.connect();
+    const proto = client.protocol || client.abstraction; // library 0.49 uses .protocol
+    const taskName = client.getPrintTaskType() || 'B1';
+    const meta = client.getModelMetadata && client.getModelMetadata();
+    const sel = $('dir').value;
+    const dir = sel === 'auto' ? ((meta && meta.printDirection) || 'top') : sel;
+    const color = niimbluelib.PageColorType ? niimbluelib.PageColorType.SingleColor : 0;
+    const encoded = niimbluelib.ImageEncoder.encodeCanvas($('cv'), color, dir);
+    const task = proto.newPrintTask(taskName, { totalPages: copies, statusPollIntervalMs: 100, statusTimeoutMs: 8000, pageColor: color, density: Math.min(5, Math.max(1, Math.round(num('density', 2)))) });
+    try {
+      await task.printInit();
+      await task.printPage(encoded, copies);
+      await task.waitForPageFinished();
+      await task.waitForFinished();
+      $('status').textContent = 'Printed ' + copies + ' label(s). (' + taskName + ', direction ' + dir + ')';
+    } finally { await proto.printEnd(); }
+  } catch (e) { $('status').textContent = 'Print error: ' + (e.message || e) + '\n(see browser console for details)'; console.error(e); }
+  finally { try { client && client.disconnect(); } catch (_) {} }
+}
+$('pbt').onclick = () => doPrint('bt');
+$('pusb').onclick = () => doPrint('usb');
+</script></body></html>
