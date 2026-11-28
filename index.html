@@ -17,6 +17,12 @@
  .may{background:rgba(255,235,59,.50)!important}
  .legend{margin:0 0 12px;padding:8px 12px;border:1px solid #bbb;font-size:13px}
  .legend span{display:inline-block;padding:2px 8px;margin-right:6px;border:1px solid #999}
+ .help{color:#555;font-size:13px;margin:4px 0}
+ .steps{margin:4px 0 8px;padding-left:22px}
+ #conn{margin:6px 0;font-weight:bold}
+ #dot{display:inline-block;width:12px;height:12px;border-radius:50%;background:#bbb;vertical-align:middle}
+ #dot.on{background:#2e7d32} #dot.busy{background:#f9a825} #dot.off{background:#bbb} #dot.err{background:#c62828}
+ #print{font-size:18px;padding:10px 28px;font-weight:bold}
  canvas{border:1px solid #888;background:#fff;image-rendering:pixelated;width:400px}
 </style></head><body>
 <h2>P|P Roast prep label (NIIMBOT B1)</h2>
@@ -40,18 +46,30 @@
 
 <div id="warn"></div>
 <canvas id="cv" width="384" height="240"></canvas>
-<p>
- <label style="min-width:auto">Print direction</label>
- <b>top</b> (fixed for both label types, so the print is never longer than one label)
- <button id="pbt" disabled>Print via Bluetooth</button>
- <button id="pusb" disabled>Print via USB</button>
- <label style="min-width:auto">Logo (PNG, once):</label> <input type="file" id="logo" accept="image/*">
-</p>
-<fieldset><legend>Print tuning (saved per computer; margins separately for each label type)</legend>
+<fieldset><legend>3. Printer</legend>
+ <ol class="steps">
+  <li>Load the label and check the preview above.</li>
+  <li>Switch the printer on and wait until the light stops blinking.</li>
+  <li>Click <b>Connect Bluetooth</b> or <b>Connect USB</b>. The printer stays connected until you switch it off or close this page, so you can print several labels without connecting again.</li>
+  <li>Click <b>Print</b>. It starts right away.</li>
+ </ol>
+ <div id="conn"><span id="dot" class="off"></span> <span id="connText">Printer not connected</span></div>
+ <button id="cbt">Connect Bluetooth</button>
+ <button id="cusb">Connect USB</button>
+ <button id="cdis" disabled>Disconnect</button>
+ <details class="help"><summary>Which one do I pick in the window?</summary>
+  <p><b>Bluetooth:</b> pick the entry that starts with <b>B1-</b> and click Pair. If the list stays empty, the printer is off, or it is still connected to the NIIMBOT app on a phone (close the app). The page asks each time you connect over Bluetooth.</p>
+  <p><b>USB:</b> plug the cable in first. The printer usually shows as <b>B1</b>, <b>usbmodem…</b> (Mac) or <b>USB Serial Device (COM…)</b> (Windows). If you are not sure, unplug the cable while the window is open, then plug it back in: the entry that disappears and comes back is the printer. You only pick it once per computer; after that, Connect USB connects without asking.</p>
+ </details>
+ <p><button id="print" disabled>Print</button> <span id="printHint" class="help"></span></p>
+ <p class="help">Print direction is fixed to top, so each print fits exactly on one label.</p>
+</fieldset>
+<fieldset><legend>Print tuning (saved per computer; left margin separately for each label type)</legend>
  <label style="min-width:auto">Left margin px</label> <input type="number" id="lm" value="30" style="width:60px"> &nbsp;
- <label style="min-width:auto">Right margin px</label> <input type="number" id="rm" value="4" style="width:60px"> &nbsp;
+ <label style="min-width:auto">Right margin px</label> <input type="number" id="rm" value="4" style="width:60px;background:#eee" readonly title="Set automatically from the left margin"> (automatic) &nbsp;
  <label style="min-width:auto">Threshold</label> <input type="number" id="thr" value="110" min="40" max="200" style="width:60px"> (lower = thinner) &nbsp;
  <label style="min-width:auto">Density</label> <input type="number" id="density" value="2" min="1" max="5" style="width:50px">
+ <p class="help">Move the label with the left margin. The right margin follows on its own, so the print keeps the full width of the chosen label type. <span id="rmNote" style="color:#b00020"></span></p>
 </fieldset>
 <div id="status"></div>
 
@@ -80,16 +98,8 @@ const defaults = { url: DEFAULT_URL, token: '', tab: String(new Date().getFullYe
   if (fromLink) store.set('pp_'+k, fromLink.trim());
   $(k).addEventListener('change', () => store.set('pp_'+k, $(k).value.trim()));
 });
-const savedLogo = store.get('pp_logo');
 logoImg = new Image(); logoImg.onload = () => L && render(L);
-logoImg.src = savedLogo || 'logo.png';
-$('logo').addEventListener('change', e => {
-  const f = e.target.files[0]; if (!f) return;
-  const r = new FileReader();
-  r.onload = () => { store.set('pp_logo', r.result); logoImg = new Image();
-    logoImg.onload = () => L && render(L); logoImg.src = r.result; };
-  r.readAsDataURL(f);
-});
+logoImg.src = 'logo.png';
 
 // ---- data -> label fields
 const digits = s => { const m = String(s).match(/\d+/); return m ? String(parseInt(m[0], 10)) : ''; };
@@ -128,7 +138,7 @@ function buildLabel(rows, from, to) {
 
 // ---- drawing
 function render(L) {
-  const two = $('ltype').value === '2up', H = two ? 640 : 240; // 45x80 mm = 360x640 px area; 50x30 mm = 400x240
+  const two = $('ltype').value === '2up', H = labelRows(); // 2-up: 78 mm of the 80 mm label; 1-up: 30 mm
   const cv = $('cv'); cv.width = W; cv.height = H;
   // draw at 3x, then downsample + hard black/white threshold = exactly what gets printed
   const S = 3, big = document.createElement('canvas'); big.width = W * S; big.height = H * S;
@@ -180,6 +190,9 @@ function render(L) {
   for (let i = 0; i < d.length; i += 4) { const v = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; d[i] = d[i + 1] = d[i + 2] = v < T ? 0 : 255; d[i + 3] = 255; }
   f.putImageData(id, 0, 0);
 }
+// Printed length in px (8 px per mm). The 2-up print used to be the full 80 mm (640 px), which made the
+// printer run on into the next label. 78 mm leaves a small safety margin; nothing is drawn below 75 mm.
+function labelRows() { return $('ltype').value === '2up' ? 624 : 240; }
 function num(id, def) { const v = parseFloat($(id).value); return isNaN(v) ? def : v; }
 
 // ---- load
@@ -201,43 +214,108 @@ $('load').onclick = async () => {
     if (data.rows.some(r => r.product !== r0.product || r.target !== r0.target)) extra.push('Rows differ in: product/target (first row used)');
     const b = buildLabel(data.rows, from, to); b.warn.push(...extra); L = b.L; render(L);
     $('warn').textContent = b.warn.join('\n'); $('status').textContent = 'Loaded ' + data.rows.length + ' roast(s). Check the preview, then print.';
-    $('pbt').disabled = $('pusb').disabled = false;
+    updatePrintBtn();
   } catch (e) { $('status').textContent = 'Error: ' + e.message; }
 };
 $('ltype').value = store.get('pp_ltype') || '1up';
 // margins are stored per label type (the two rolls sit differently in the printer)
 const MARG = { '1up': { lm: 30, rm: 4 }, '2up': { lm: 2, rm: 56 } };
-function loadMargins() { const t = $('ltype').value;
-  ['lm','rm'].forEach(k => { const s = store.get('pp_' + k + '_' + t); $(k).value = s !== null ? s : MARG[t][k]; }); }
+// The printed width per label type stays the same; moving the left margin moves the whole print,
+// and the right margin follows. Earlier tuning on this computer is kept.
+function widthFor(t) {
+  const w = store.get('pp_w_' + t); if (w !== null && !isNaN(+w)) return +w;
+  const ol = store.get('pp_lm_' + t), or = store.get('pp_rm_' + t);
+  if (ol !== null && or !== null && !isNaN(+ol) && !isNaN(+or)) return W - (+ol) - (+or);
+  return W - MARG[t].lm - MARG[t].rm;
+}
+function syncRight() {
+  const t = $('ltype').value, lm = Math.max(0, num('lm', MARG[t].lm)), w = widthFor(t), rm = W - lm - w;
+  $('rm').value = Math.max(0, rm);
+  $('rmNote').textContent = rm < 0 ? 'The left margin is larger than this label allows, so the print is squeezed slightly.' : '';
+}
+function loadMargins() { const t = $('ltype').value, s = store.get('pp_lm_' + t);
+  $('lm').value = s !== null ? s : MARG[t].lm; syncRight(); }
 loadMargins();
 $('ltype').addEventListener('change', () => { store.set('pp_ltype', $('ltype').value); loadMargins(); if (L) render(L); });
-['lm','rm'].forEach(k => $(k).addEventListener('input', () => { store.set('pp_' + k + '_' + $('ltype').value, $(k).value); if (L) render(L); }));
+$('lm').addEventListener('input', () => { const t = $('ltype').value;
+  store.set('pp_w_' + t, String(widthFor(t))); store.set('pp_lm_' + t, $('lm').value); syncRight(); if (L) render(L); });
 // other tuning fields: restore, save, re-render
 ['thr','density'].forEach(k => { const s = store.get('pp_'+k); if (s !== null) $(k).value = s;
   $(k).addEventListener('input', () => { store.set('pp_'+k, $(k).value); if (L) render(L); }); });
 // re-render when manual fields change
 ['product','ag'].forEach(k => $(k).addEventListener('input', () => { if (L) { L.product = $('product').value.trim(); L.ag = $('ag').value; render(L); } }));
 
-// ---- print
-async function doPrint(mode) {
-  if (!L) return;
+// ---- printer connection (stays open between prints)
+let client = null, printing = false, skipRemembered = false;
+const isOn = () => !!(client && client.isConnected());
+function setConn(state, text) {
+  $('dot').className = state; $('connText').textContent = text;
+  $('cbt').disabled = $('cusb').disabled = state === 'busy';
+  $('cdis').disabled = !client; updatePrintBtn();
+}
+function updatePrintBtn() {
+  $('print').disabled = !(L && isOn() && !printing);
+  $('printHint').textContent = printing ? '' : !L ? 'Load a label first (step 1).' : !isOn() ? 'Connect the printer first (step 3).' : 'Ready.';
+}
+async function disconnectPrinter() {
+  const c = client; client = null;
+  if (c) { try { await c.disconnect(); } catch (_) {} }
+}
+async function connectPrinter(mode) {
+  const usb = mode === 'usb';
+  if (usb && !('serial' in navigator)) return setConn('err', 'USB printing needs Google Chrome or Microsoft Edge on a computer.');
+  if (!usb && !('bluetooth' in navigator)) return setConn('err', 'Bluetooth printing needs Google Chrome or Microsoft Edge, with Bluetooth switched on.');
+  await disconnectPrinter();
+  const c = usb ? new niimbluelib.NiimbotSerialClient() : new niimbluelib.NiimbotBluetoothClient();
+  let opts;
+  if (usb && !skipRemembered) {
+    // reuse the port picked before on this computer, so no window opens
+    try {
+      const ports = await navigator.serial.getPorts(), want = store.get('pp_usb');
+      const id = p => { const i = p.getInfo(); return i.usbVendorId + ':' + i.usbProductId; };
+      const p = ports.find(p => want && id(p) === want) || (ports.length === 1 ? ports[0] : null);
+      if (p) opts = { authorizedPort: p };
+    } catch (_) {}
+  }
+  skipRemembered = false;
+  setConn('busy', opts ? 'Connecting via USB…' : usb ? 'Pick the printer in the window (see "Which one do I pick" below).' : 'Pick the printer starting with "B1-" in the window, then Pair.');
+  try {
+    const info = await c.connect(opts);
+    client = c;
+    if (usb) { try { const i = c.port.getInfo(); store.set('pp_usb', i.usbVendorId + ':' + i.usbProductId); } catch (_) {} }
+    c.on('disconnect', () => { if (client === c) { client = null;
+      setConn('off', 'Printer disconnected (switched off, unplugged or out of range). Switch it on and click Connect again.'); } });
+    const name = usb ? 'B1 printer' : (info && info.deviceName) || 'B1 printer';
+    setConn('on', 'Connected: ' + name + ' via ' + (usb ? 'USB' : 'Bluetooth'));
+  } catch (e) {
+    console.error(e);
+    try { await c.disconnect(); } catch (_) {}
+    const msg = String((e && e.message) || e);
+    if (/cancel|No port selected|No device selected|NotFoundError/i.test(msg) && !opts) setConn('off', 'No printer picked. Click Connect again when the printer is on.');
+    else if (opts) { skipRemembered = true; setConn('err', 'Could not reach the printer. Check it is on and plugged in, then click Connect USB again (a window will open).'); }
+    else setConn('err', 'Could not connect: ' + msg + '. Switch the printer off and on, then try again.');
+  }
+}
+$('cbt').onclick = () => connectPrinter('bt');
+$('cusb').onclick = () => connectPrinter('usb');
+$('cdis').onclick = async () => { await disconnectPrinter(); setConn('off', 'Printer not connected'); };
+window.addEventListener('beforeunload', () => { try { client && client.disconnect(); } catch (_) {} });
+
+// ---- print (uses the open connection, so it starts right away)
+async function doPrint() {
+  if (!L || !isOn() || printing) return;
   L.product = $('product').value.trim(); L.ag = $('ag').value; render(L);
   const copies = Math.max(1, parseInt($('copies').value, 10) || 1);
-  let client;
+  printing = true; updatePrintBtn(); $('status').textContent = 'Printing ' + copies + ' label(s)…';
+  const c = client;
   try {
-    $('status').textContent = 'Connecting (' + mode + ')... pick the printer in the browser popup.';
-    client = mode === 'usb' ? new niimbluelib.NiimbotSerialClient() : new niimbluelib.NiimbotBluetoothClient();
-    await client.connect();
-    const proto = client.protocol || client.abstraction; // library 0.49 uses .protocol
-    const taskName = client.getPrintTaskType() || 'B1';
-    const meta = client.getModelMetadata && client.getModelMetadata();
-    // B1 prints head-first ('top'). 'left' rotated the image and made a 30 mm label print 48 mm long,
-    // which ran into the next label. Direction is now fixed, and the length is checked before printing.
+    const proto = c.protocol || c.abstraction; // library 0.49 uses .protocol
+    const taskName = c.getPrintTaskType() || 'B1';
+    // B1 prints head-first ('top'); 'left' rotated the image and made the print longer than the label.
     const dir = 'top';
     const color = niimbluelib.PageColorType ? niimbluelib.PageColorType.SingleColor : 0;
     const encoded = niimbluelib.ImageEncoder.encodeCanvas($('cv'), color, dir);
-    const labelRows = $('ltype').value === '2up' ? 640 : 240; // 80 mm or 30 mm at 8 px/mm
-    if (encoded.rows !== labelRows) throw new Error('Label image is ' + encoded.rows + ' px long but the label is ' + labelRows + ' px. Not printing, to avoid running into the next label.');
+    if (encoded.rows !== labelRows()) throw new Error('Label image is ' + encoded.rows + ' px long but should be ' + labelRows() + ' px. Not printing, to avoid running into the next label.');
     const gaps = niimbluelib.LabelType ? niimbluelib.LabelType.WithGaps : 1; // stop at the gap after each label
     const task = proto.newPrintTask(taskName, { labelType: gaps, totalPages: copies, statusPollIntervalMs: 100, statusTimeoutMs: 8000, pageColor: color, density: Math.min(5, Math.max(1, Math.round(num('density', 2)))) });
     try {
@@ -245,11 +323,13 @@ async function doPrint(mode) {
       await task.printPage(encoded, copies);
       await task.waitForPageFinished();
       await task.waitForFinished();
-      $('status').textContent = 'Printed ' + copies + ' label(s). (' + taskName + ', direction ' + dir + ')';
-    } finally { await proto.printEnd(); }
-  } catch (e) { $('status').textContent = 'Print error: ' + (e.message || e) + '\n(see browser console for details)'; console.error(e); }
-  finally { try { client && client.disconnect(); } catch (_) {} }
+      $('status').textContent = 'Printed ' + copies + ' label(s). The printer stays connected for the next one.';
+    } finally { try { await proto.printEnd(); } catch (_) {} }
+  } catch (e) {
+    console.error(e);
+    $('status').textContent = 'Print error: ' + (e.message || e) + (isOn() ? '' : '\nThe printer is no longer connected. Switch it on and click Connect again.');
+  } finally { printing = false; if (!isOn() && client === c) { client = null; setConn('off', 'Printer not connected'); } updatePrintBtn(); }
 }
-$('pbt').onclick = () => doPrint('bt');
-$('pusb').onclick = () => doPrint('usb');
+$('print').onclick = doPrint;
+updatePrintBtn();
 </script></body></html>
