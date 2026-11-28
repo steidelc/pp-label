@@ -46,7 +46,7 @@
  <label style="min-width:auto;margin-left:8px"><input type="checkbox" id="snd" checked> Sounds</label>
  <div id="roll"></div>
  <details class="help"><summary>Which one do I pick in the window?</summary>
-  <p><b>Bluetooth:</b> pick the entry that starts with <b>B1-</b> and click Pair. If the list stays empty, the printer is off, or it is still connected to the NIIMBOT app on a phone (close the app). The page asks each time you connect over Bluetooth.</p>
+  <p><b>Bluetooth:</b> pick the entry that starts with <b>B1-</b> and click Pair. Do <b>not</b> pair the printer in the Mac's or PC's own Bluetooth settings: that blocks the browser. If the list stays empty: the printer may be off, or still connected to the NIIMBOT app on a phone (close the app) or to another computer; and Chrome must be allowed to use Bluetooth (Mac: System Settings → Privacy &amp; Security → Bluetooth → Google Chrome on). The page asks each time you connect over Bluetooth.</p>
   <p><b>USB:</b> plug the cable in first. The printer usually shows as <b>B1</b>, <b>usbmodem…</b> (Mac) or <b>USB Serial Device (COM…)</b> (Windows). If you are not sure, unplug the cable while the window is open, then plug it back in: the entry that disappears and comes back is the printer. You only pick it once per computer; after that, Connect USB connects without asking.</p>
  </details>
 </fieldset>
@@ -511,6 +511,7 @@ async function connectPrinter(mode) {
     const msg = String((e && e.message) || e);
     if (/cancel|No port selected|No device selected|NotFoundError/i.test(msg) && !opts) setConn('off', 'No printer picked. Click Connect again when the printer is on.');
     else if (opts) { skipRemembered = true; sound.error(); setConn('err', 'Could not reach the printer. Check it is on and plugged in, then click Connect USB again (a window will open).'); }
+    else if (/Unsupported device/i.test(msg)) { sound.error(); setConn('err', 'The Mac has this printer connected in its own Bluetooth settings, which blocks the browser. Click the Bluetooth icon in the menu bar → Bluetooth Settings → (i) next to the B1 printer → Forget This Device. Then switch the printer off and on and click Connect Bluetooth again.'); }
     else { sound.error(); setConn('err', 'Could not connect: ' + msg + '. Switch the printer off and on, then try again.'); }
   }
 }
