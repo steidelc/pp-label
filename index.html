@@ -47,6 +47,7 @@
  <div id="roll"></div>
  <details class="help"><summary>Which one do I pick in the window?</summary>
   <p><b>Bluetooth:</b> pick the entry that starts with <b>B1-</b> and click Pair. Do <b>not</b> pair the printer in the Mac's or PC's own Bluetooth settings: that blocks the browser. If the list stays empty: the printer may be off, or still connected to the NIIMBOT app on a phone (close the app) or to another computer; and Chrome must be allowed to use Bluetooth (Mac: System Settings → Privacy &amp; Security → Bluetooth → Google Chrome on). The page asks each time you connect over Bluetooth.</p>
+  <p><b>Printer not in the Bluetooth list?</b> <button id="cbtall" style="font-size:13px;padding:4px 10px">Search all Bluetooth devices</button> This lists everything nearby, not only NIIMBOT printers. Pick the printer (it may show a different name, or "Unknown or unsupported device"). If it connects, tell Claude the name it showed.</p>
   <p><b>USB:</b> plug the cable in first. The printer usually shows as <b>B1</b>, <b>usbmodem…</b> (Mac) or <b>USB Serial Device (COM…)</b> (Windows). If you are not sure, unplug the cable while the window is open, then plug it back in: the entry that disappears and comes back is the printer. You only pick it once per computer; after that, Connect USB connects without asking.</p>
  </details>
 </fieldset>
@@ -476,13 +477,23 @@ async function disconnectPrinter() {
   if (c) { try { await c.disconnect(); } catch (_) {} }
 }
 async function connectPrinter(mode) {
-  const usb = mode === 'usb';
+  const usb = mode === 'usb', all = mode === 'btall';
   if (usb && !('serial' in navigator)) return setConn('err', 'USB printing needs Google Chrome or Microsoft Edge on a computer.');
   if (!usb && !('bluetooth' in navigator)) return setConn('err', 'Bluetooth printing needs Google Chrome or Microsoft Edge, with Bluetooth switched on.');
   beep([], 0); // unlock sound on this click
   await disconnectPrinter();
   const c = usb ? new niimbluelib.NiimbotSerialClient() : new niimbluelib.NiimbotBluetoothClient();
   let opts;
+  if (all) {
+    // fallback: show every nearby device, in case this printer announces itself differently
+    setConn('busy', 'Pick the printer in the window (it may have another name).');
+    try {
+      const svc = (c.getServiceUuidFilter && c.getServiceUuidFilter()) || [];
+      const dev = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: svc });
+      console.log('Picked Bluetooth device', dev.name, dev.id);
+      opts = { authorizedDevice: dev };
+    } catch (e) { console.error(e); return setConn('off', 'No device picked. Click Connect again when the printer is on.'); }
+  }
   if (usb && !skipRemembered) {
     // reuse the port picked before on this computer, so no window opens
     try {
@@ -493,7 +504,7 @@ async function connectPrinter(mode) {
     } catch (_) {}
   }
   skipRemembered = false;
-  setConn('busy', opts ? 'Connecting via USB…' : usb ? 'Pick the printer in the window (see "Which one do I pick" below).' : 'Pick the printer starting with "B1-" in the window, then Pair.');
+  setConn('busy', opts ? (usb ? 'Connecting via USB…' : 'Connecting via Bluetooth…') : usb ? 'Pick the printer in the window (see "Which one do I pick" below).' : 'Pick the printer starting with "B1-" in the window, then Pair.');
   try {
     const info = await c.connect(opts);
     client = c;
@@ -510,6 +521,7 @@ async function connectPrinter(mode) {
     try { await c.disconnect(); } catch (_) {}
     const msg = String((e && e.message) || e);
     if (/cancel|No port selected|No device selected|NotFoundError/i.test(msg) && !opts) setConn('off', 'No printer picked. Click Connect again when the printer is on.');
+    else if (all) { sound.error(); setConn('err', 'Could not connect to the picked device: ' + msg + '. Tell Claude this message.'); }
     else if (opts) { skipRemembered = true; sound.error(); setConn('err', 'Could not reach the printer. Check it is on and plugged in, then click Connect USB again (a window will open).'); }
     else if (/Unsupported device/i.test(msg)) { sound.error(); setConn('err', 'The Mac has this printer connected in its own Bluetooth settings, which blocks the browser. Click the Bluetooth icon in the menu bar → Bluetooth Settings → (i) next to the B1 printer → Forget This Device. Then switch the printer off and on and click Connect Bluetooth again.'); }
     else { sound.error(); setConn('err', 'Could not connect: ' + msg + '. Switch the printer off and on, then try again.'); }
@@ -517,6 +529,7 @@ async function connectPrinter(mode) {
 }
 $('cbt').onclick = () => connectPrinter('bt');
 $('cusb').onclick = () => connectPrinter('usb');
+$('cbtall').onclick = () => connectPrinter('btall');
 $('cdis').onclick = async () => { await disconnectPrinter(); $('roll').textContent = ''; setConn('off', 'Printer not connected'); };
 window.addEventListener('beforeunload', () => { try { client && client.disconnect(); } catch (_) {} });
 
