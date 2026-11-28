@@ -82,10 +82,12 @@
  <label>Sheet tab (year)</label><input type="text" id="tab" style="width:80px">
  <p class="help"><b>Print tuning</b> (saved on this computer, left margin separately for each label size)</p>
  <label style="min-width:auto">Left margin px</label> <input type="number" id="lm" value="30" style="width:60px"> &nbsp;
- <label style="min-width:auto">Right margin px</label> <input type="number" id="rm" value="4" style="width:60px;background:#eee" readonly title="Set automatically from the left margin"> (automatic) &nbsp;
+ <label style="min-width:auto">Right margin px</label> <input type="number" id="rm" value="4" style="width:60px;background:#eee" readonly title="Set automatically from the left margin"> (automatic)<br>
+ <label style="min-width:auto">Top margin px</label> <input type="number" id="tm" value="0" min="0" style="width:60px"> &nbsp;
+ <label style="min-width:auto">Bottom margin px</label> <input type="number" id="bm" value="0" style="width:60px;background:#eee" readonly title="Set automatically from the top margin"> (automatic) &nbsp;
  <label style="min-width:auto">Threshold</label> <input type="number" id="thr" value="110" min="40" max="200" style="width:60px"> (lower = thinner) &nbsp;
  <label style="min-width:auto">Density</label> <input type="number" id="density" value="2" min="1" max="5" style="width:50px">
- <p class="help">Move the print with the left margin. The right margin follows on its own, so the print keeps the full width of the label. Print direction is fixed to top, so each print fits on one label. <span id="rmNote" style="color:#b00020"></span></p>
+ <p class="help">Move the print sideways with the left margin and up or down with the top margin. The right and bottom margins follow on their own, so the print keeps its size on the label (8 px = 1 mm). Print direction is fixed to top, so each print fits on one label. <span id="rmNote" style="color:#b00020"></span> <span id="bmNote" style="color:#b00020"></span></p>
 </fieldset>
 
 <script src="https://unpkg.com/@mmote/niimbluelib@0.49.1/dist/umd/niimbluelib.min.js"></script>
@@ -316,13 +318,13 @@ function render(L) {
   const draw = { full: drawFull, short: drawShort, narrow: drawNarrow }[plan.lay.id];
   const portion = spec.l * MM / spec.n;
   g.fillStyle = '#000'; g.strokeStyle = '#000';
-  for (let k = 0; k < spec.n; k++) {
-    const top = k * portion, avail = Math.min(portion, rows - top);
-    if (avail <= 0) break;
-    const oy = top + Math.max(0, (avail - plan.lay.DH * plan.ay) / 2);
-    g.setTransform(S * plan.ax, 0, 0, S * plan.ay, S * (lm - 8 * plan.ax), S * oy);
+  const tm = Math.max(0, num('tm', 0));
+  portions(spec).forEach(({ top, avail }) => {
+    // squeeze only if the top margin pushes the print past the end of the label
+    const ay = tm + plan.lay.DH * plan.ay > avail ? Math.max(0.1, (avail - tm) / plan.lay.DH) : plan.ay;
+    g.setTransform(S * plan.ax, 0, 0, S * ay, S * (lm - 8 * plan.ax), S * (top + tm));
     draw();
-  }
+  });
   // cut lines between labels on one
   g.setTransform(S, 0, 0, S, 0, 0); g.lineWidth = 2; g.setLineDash([6, 5]); g.beginPath();
   for (let k = 1; k < spec.n; k++) { const y = Math.round(k * portion); g.moveTo(lm, y); g.lineTo(W - rm, y); }
@@ -381,7 +383,29 @@ function loadMargins() {
   const s = store.get('pp_lm_' + specKey(spec));
   $('lm').value = s !== null ? s : defaultsFor(spec).lm; syncRight();
 }
-function onSpecChange() { loadMargins(); updateSizeInfo(); if (L) render(L); }
+// Top margin: set by hand per label size. The printed height stays the same, the bottom margin follows.
+// Default = content centred on the label, as before. With several labels on one, each gets the same top margin.
+function portions(spec) {
+  const rows = rowsFor(spec), portion = spec.l * MM / spec.n, out = [];
+  for (let k = 0; k < spec.n; k++) { const top = k * portion, avail = Math.min(portion, rows - top); if (avail > 0) out.push({ top, avail }); }
+  return out;
+}
+function topDefault(spec, plan) { return Math.max(0, Math.round((portions(spec)[0].avail - plan.lay.DH * plan.ay) / 2)); }
+function loadTop() {
+  const spec = getSpec(), plan = planLayout(spec); if (!spec || plan.err) return;
+  const s = store.get('pp_tm_' + specKey(spec));
+  $('tm').value = s !== null ? s : topDefault(spec, plan); syncBottom();
+}
+function syncBottom() {
+  const spec = getSpec(), plan = planLayout(spec); if (!spec || plan.err) { $('bm').value = ''; $('bmNote').textContent = ''; return; }
+  const tm = Math.max(0, num('tm', 0)), h = plan.lay.DH * plan.ay;
+  const bm = Math.min(...portions(spec).map(p => p.avail - tm - h));
+  $('bm').value = Math.max(0, Math.round(bm));
+  $('bmNote').textContent = bm < 0 ? 'The top margin is larger than this label allows, so the print is squeezed slightly.' : '';
+}
+$('tm').addEventListener('input', () => { const spec = getSpec(); if (!spec) return;
+  store.set('pp_tm_' + specKey(spec), $('tm').value); syncBottom(); if (L) render(L); });
+function onSpecChange() { loadMargins(); updateSizeInfo(); loadTop(); if (L) render(L); }
 const savedType = store.get('pp_ltype');
 $('ltype').value = savedType === '1up' ? '50x30' : savedType === '2up' ? '45x80' : (savedType || 'auto');
 if (!$('ltype').value) $('ltype').value = 'auto';
@@ -397,7 +421,7 @@ $('ltype').addEventListener('change', () => {
 $('nup').addEventListener('change', () => { store.set('pp_nup', $('nup').value); onSpecChange(); });
 $('csize').addEventListener('input', () => { store.set('pp_csize', $('csize').value); onSpecChange(); });
 $('lm').addEventListener('input', () => { const spec = getSpec(); if (!spec) return; const k = specKey(spec);
-  store.set('pp_w_' + k, String(widthFor(spec))); store.set('pp_lm_' + k, $('lm').value); syncRight(); updateSizeInfo(); if (L) render(L); });
+  store.set('pp_w_' + k, String(widthFor(spec))); store.set('pp_lm_' + k, $('lm').value); syncRight(); updateSizeInfo(); syncBottom(); if (L) render(L); });
 // other tuning fields: restore, save, re-render
 ['thr','density'].forEach(k => { const s = store.get('pp_'+k); if (s !== null) $(k).value = s;
   $(k).addEventListener('input', () => { store.set('pp_'+k, $(k).value); if (L) render(L); }); });
@@ -529,6 +553,6 @@ async function doPrint() {
   } finally { printing = false; if (!isOn() && client === c) { client = null; setConn('off', 'Printer not connected'); } updatePrintBtn(); }
 }
 $('print').onclick = doPrint;
-loadMargins(); updateSizeInfo();
+loadMargins(); updateSizeInfo(); loadTop();
 </script>
 </body></html>
