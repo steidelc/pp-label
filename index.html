@@ -16,7 +16,6 @@
  button{padding:8px 14px;font-size:14px;margin:4px 6px 4px 0;cursor:pointer}
  #warn{color:#b00020;font-weight:bold;white-space:pre-line}
  #status{color:#555;white-space:pre-line}
-
  .must{background:rgba(255,152,0,.40)!important}
  .may{background:rgba(255,235,59,.50)!important}
  .legend{margin:0 0 12px;padding:8px 12px;border:1px solid #bbb;font-size:13px}
@@ -26,73 +25,86 @@
  #conn{margin:6px 0;font-weight:bold}
  #dot{display:inline-block;width:12px;height:12px;border-radius:50%;background:#bbb;vertical-align:middle}
  #dot.on{background:#2e7d32} #dot.busy{background:#f9a825} #dot.off{background:#bbb} #dot.err{background:#c62828}
+ #roll{margin:6px 0;font-size:14px}
+ #sizeInfo{font-size:13px;margin:4px 0}
+ #sizeInfo.bad{color:#b00020;font-weight:bold}
  #print{font-size:18px;padding:10px 28px;font-weight:bold}
  canvas{border:1px solid #888;background:#fff;image-rendering:pixelated;width:400px}
 </style></head><body>
 <h2>P|P Roast prep label (NIIMBOT B1)</h2>
-<div class="legend"><span class="must">orange</span> fill in every time &nbsp; <span class="may">yellow</span> filled automatically from the sheet, you may edit &nbsp; <span style="background:#fff">white</span> set once (sheet link, tuning)</div>
+<div class="legend"><span class="must">orange</span> fill in every time &nbsp; <span class="may">yellow</span> filled automatically, you may edit &nbsp; <span style="background:#fff">white</span> set once (settings at the bottom)</div>
 
-<fieldset><legend>1. Sheet link (built in; the token comes from your bookmark link)</legend>
- <label>Apps Script URL</label><input class="w" type="text" id="url"><br>
- <label>Token</label><input type="text" id="token"><br>
- <label>Sheet tab (year)</label><input type="text" id="tab" style="width:80px">
+<fieldset><legend>1. Printer</legend>
+ <ol class="steps">
+  <li>Switch the printer on and wait until the light stops blinking.</li>
+  <li>Click <b>Connect Bluetooth</b> or <b>Connect USB</b>. The page reads the label roll that is loaded. The printer stays connected until you switch it off or close this page.</li>
+ </ol>
+ <div id="conn"><span id="dot" class="off"></span> <span id="connText">Printer not connected</span></div>
+ <button id="cbt">Connect Bluetooth</button>
+ <button id="cusb">Connect USB</button>
+ <button id="cdis" disabled>Disconnect</button>
+ <label style="min-width:auto;margin-left:8px"><input type="checkbox" id="snd" checked> Sounds</label>
+ <div id="roll"></div>
+ <details class="help"><summary>Which one do I pick in the window?</summary>
+  <p><b>Bluetooth:</b> pick the entry that starts with <b>B1-</b> and click Pair. If the list stays empty, the printer is off, or it is still connected to the NIIMBOT app on a phone (close the app). The page asks each time you connect over Bluetooth.</p>
+  <p><b>USB:</b> plug the cable in first. The printer usually shows as <b>B1</b>, <b>usbmodem…</b> (Mac) or <b>USB Serial Device (COM…)</b> (Windows). If you are not sure, unplug the cable while the window is open, then plug it back in: the entry that disappears and comes back is the printer. You only pick it once per computer; after that, Connect USB connects without asking.</p>
+ </details>
 </fieldset>
 
-<fieldset><legend>2. Label input</legend>
+<fieldset><legend>2. Label</legend>
+ <label>Label size</label><select id="ltype" class="may">
+  <option value="auto">From the printer (roll that is loaded)</option>
+  <option value="50x30">50 x 30 mm (T50*30)</option>
+  <option value="45x80">45 x 80 mm (T45*80)</option>
+  <option value="custom">Other size…</option>
+ </select>
+ <span id="customBox" style="display:none"><input type="text" id="csize" placeholder="e.g. T40*30-230 or 40x30" style="width:190px"></span><br>
+ <label>Labels on one</label><select id="nup" class="may"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
+ <span class="help">(2 = the same label twice on one long label, with a cut line)</span>
+ <div id="sizeInfo"></div>
  <label>Product name</label><input class="w may" type="text" id="product" placeholder="e.g. Espresso MD"><br>
  <label>PR from</label><input type="number" id="from" class="must"> &nbsp;
  <label style="min-width:auto">to</label> <input type="number" id="to" class="may"> (empty = single roast)<br>
  <label>AG (target)</label><input class="w may" type="text" id="ag" value="…….. (  )"> (keep the dots for pencil)<br>
- <label>Label type</label><select id="ltype" class="may"><option value="1up">T50*30 (50x30 mm)</option><option value="2up">T45*80-90 (45x80 mm, 2 labels on one)</option></select><br>
  <label>Copies</label><input type="number" id="copies" class="may" value="1" min="1" max="20" style="width:60px">
  <button id="load">Load from sheet + preview</button>
 </fieldset>
 
 <div id="warn"></div>
 <canvas id="cv" width="384" height="240"></canvas>
-<fieldset><legend>3. Printer</legend>
- <ol class="steps">
-  <li>Load the label and check the preview above.</li>
-  <li>Switch the printer on and wait until the light stops blinking.</li>
-  <li>Click <b>Connect Bluetooth</b> or <b>Connect USB</b>. The printer stays connected until you switch it off or close this page, so you can print several labels without connecting again.</li>
-  <li>Click <b>Print</b>. It starts right away.</li>
- </ol>
- <div id="conn"><span id="dot" class="off"></span> <span id="connText">Printer not connected</span></div>
- <button id="cbt">Connect Bluetooth</button>
- <button id="cusb">Connect USB</button>
- <button id="cdis" disabled>Disconnect</button>
- <details class="help"><summary>Which one do I pick in the window?</summary>
-  <p><b>Bluetooth:</b> pick the entry that starts with <b>B1-</b> and click Pair. If the list stays empty, the printer is off, or it is still connected to the NIIMBOT app on a phone (close the app). The page asks each time you connect over Bluetooth.</p>
-  <p><b>USB:</b> plug the cable in first. The printer usually shows as <b>B1</b>, <b>usbmodem…</b> (Mac) or <b>USB Serial Device (COM…)</b> (Windows). If you are not sure, unplug the cable while the window is open, then plug it back in: the entry that disappears and comes back is the printer. You only pick it once per computer; after that, Connect USB connects without asking.</p>
- </details>
- <p><button id="print" disabled>Print</button> <span id="printHint" class="help"></span></p>
- <p class="help">Print direction is fixed to top, so each print fits exactly on one label.</p>
-</fieldset>
-<fieldset><legend>Print tuning (saved per computer; left margin separately for each label type)</legend>
+<p><button id="print" disabled>Print</button> <span id="printHint" class="help"></span></p>
+<div id="status"></div>
+
+<fieldset><legend>Settings (set once)</legend>
+ <p class="help" style="margin-top:0"><b>Sheet link.</b> The token comes from your bookmark link.</p>
+ <label>Apps Script URL</label><input class="w" type="text" id="url"><br>
+ <label>Token</label><input type="text" id="token"><br>
+ <label>Sheet tab (year)</label><input type="text" id="tab" style="width:80px">
+ <p class="help"><b>Print tuning</b> (saved on this computer, left margin separately for each label size)</p>
  <label style="min-width:auto">Left margin px</label> <input type="number" id="lm" value="30" style="width:60px"> &nbsp;
  <label style="min-width:auto">Right margin px</label> <input type="number" id="rm" value="4" style="width:60px;background:#eee" readonly title="Set automatically from the left margin"> (automatic) &nbsp;
  <label style="min-width:auto">Threshold</label> <input type="number" id="thr" value="110" min="40" max="200" style="width:60px"> (lower = thinner) &nbsp;
  <label style="min-width:auto">Density</label> <input type="number" id="density" value="2" min="1" max="5" style="width:50px">
- <p class="help">Move the label with the left margin. The right margin follows on its own, so the print keeps the full width of the chosen label type. <span id="rmNote" style="color:#b00020"></span></p>
+ <p class="help">Move the print with the left margin. The right margin follows on its own, so the print keeps the full width of the label. Print direction is fixed to top, so each print fits on one label. <span id="rmNote" style="color:#b00020"></span></p>
 </fieldset>
-<div id="status"></div>
 
 <script src="https://unpkg.com/@mmote/niimbluelib@0.49.1/dist/umd/niimbluelib.min.js"></script>
 <script>
 const $ = id => document.getElementById(id);
-const W = 384; // B1 print head = 384 px wide; label 50x30 mm. Layout is drawn in 400x240 space and scaled.
+const W = 384;      // B1 print head = 384 px (48 mm) wide, 8 px per mm
+const MM = 8;
 let L = null, logoImg = null;
 
 // ---- saved settings
 // Browser storage can be wiped (Safari clears it after 7 days without a visit; some browsers on close),
-// so nothing important depends on it any more:
+// so nothing important depends on it:
 //  - the Apps Script URL and the logo are built into the page,
 //  - the token comes from the bookmark link: https://steidelc.github.io/pp-label/#token=YOUR_TOKEN
 //    (the part after # never leaves the computer and is not stored on GitHub).
 const DEFAULT_URL = 'https://script.google.com/macros/s/AKfycbzWv7V63AJ1wkhHLBNaeUw17f4Lc4Cb8hO5tkSS8szwP5DHghGg8Jh6h64_8jg6s78T/exec';
 const store = {
-  get: k => { try { return store.get(k); } catch (_) { return null; } },
-  set: (k, v) => { try { store.set(k, v); } catch (_) {} }
+  get: k => { try { return window.localStorage.getItem(k); } catch (_) { return null; } },
+  set: (k, v) => { try { window.localStorage.setItem(k, v); } catch (_) {} }
 };
 const hash = new URLSearchParams(location.hash.slice(1));
 const defaults = { url: DEFAULT_URL, token: '', tab: String(new Date().getFullYear()) };
@@ -104,6 +116,31 @@ const defaults = { url: DEFAULT_URL, token: '', tab: String(new Date().getFullYe
 });
 logoImg = new Image(); logoImg.onload = () => L && render(L);
 logoImg.src = 'logo.png';
+
+// ---- sounds (played on the computer)
+let actx = null;
+function beep(freqs, dur) {
+  if (!$('snd').checked) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    let t = actx.currentTime + 0.01;
+    freqs.forEach(f => {
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(actx.destination); o.start(t); o.stop(t + dur + 0.02); t += dur + 0.04;
+    });
+  } catch (_) {}
+}
+const sound = {
+  connected: () => beep([660, 880], 0.12),
+  lost: () => beep([660, 440], 0.18),
+  printed: () => beep([990], 0.08),
+  error: () => beep([300, 300], 0.15)
+};
+store.get('pp_snd') === '0' && ($('snd').checked = false);
+$('snd').addEventListener('change', () => store.set('pp_snd', $('snd').checked ? '1' : '0'));
 
 // ---- data -> label fields
 const digits = s => { const m = String(s).match(/\d+/); return m ? String(parseInt(m[0], 10)) : ''; };
@@ -140,63 +177,158 @@ function buildLabel(rows, from, to) {
   };
 }
 
+// ---- label size
+let rollSpec = null, rollCode = null;   // what the printer reported for the loaded roll
+function parseSize(s) {
+  const m = String(s || '').match(/(\d+(?:[.,]\d+)?)\s*[*xX×]\s*(\d+(?:[.,]\d+)?)/);
+  if (!m) return null;
+  const w = parseFloat(m[1].replace(',', '.')), l = parseFloat(m[2].replace(',', '.'));
+  return w > 0 && l > 0 ? { w, l } : null;
+}
+function getSpec() {
+  const v = $('ltype').value, n = parseInt($('nup').value, 10) || 1;
+  if (v === 'auto') return rollSpec ? { w: rollSpec.w, l: rollSpec.l, n, src: 'printer' } : { w: 50, l: 30, n, src: 'default' };
+  if (v === 'custom') { const p = parseSize($('csize').value); return p ? { w: p.w, l: p.l, n, src: 'typed' } : null; }
+  const p = parseSize(v); return { w: p.w, l: p.l, n, src: 'list' };
+}
+// Printed length in px. Long labels (over 40 mm) are printed 2 mm short: printing the full 80 mm made the
+// printer run on into the next label. 50x30 prints exactly 30 mm (240 px), which works.
+function rowsFor(spec) { return Math.round(spec.l * MM) - (spec.l > 40 ? 2 * MM : 0); }
+function specKey(spec) {
+  const k = spec.w + 'x' + spec.l + 'x' + spec.n;
+  return k === '50x30x1' ? '1up' : k === '45x80x2' ? '2up' : k;   // keep earlier saved tuning
+}
+
+// Three layouts, tried in order. Each is drawn in its own design space (x from 8 to 8+DW) and scaled to the label.
+//  full:   the original 50x30 label
+//  short:  header on one line; no logo, Hand/Color, R:, Roaster:, Pr:
+//  narrow: like short, but one column for narrow labels
+const LAYOUTS = [
+  { id: 'full',   DW: 384, DH: 240, text: 'full label' },
+  { id: 'short',  DW: 384, DH: 130, text: 'short version (header on one line; no logo, Hand/Color, R:, Roaster:, Pr:)' },
+  { id: 'narrow', DW: 200, DH: 216, text: 'narrow version (one column; no logo, Hand/Color, R:, Roaster:, Pr:)' }
+];
+const MIN_SCALE = 0.7;   // smaller than this and the text gets too small to read
+function planLayout(spec) {
+  if (!spec) return { err: 'Type a label size, e.g. 40x30.' };
+  if (spec.w > 50) return { err: 'Labels wider than 50 mm do not fit the B1.' };
+  const lm = num('lm', 0), rm = num('rm', 0), boxW = W - lm - rm;
+  const rows = rowsFor(spec), boxH = Math.min(spec.l * MM / spec.n, rows);
+  if (boxW <= 0 || boxH <= 0) return { err: 'Label too small.' };
+  for (const lay of LAYOUTS) {
+    const sx = boxW / lay.DW, sy = boxH / lay.DH;
+    let ax, ay;
+    if (sx >= 1 && sy >= 1) { ax = ay = Math.min(sx, sy, 1.5); }
+    else { ax = Math.min(sx, 1); ay = Math.min(sy, 1); if (ay > ax * 1.35) ay = ax * 1.35; if (ax > ay * 1.35) ax = ay * 1.35; }
+    if (Math.min(ax, ay) >= MIN_SCALE) return { lay, ax, ay };
+  }
+  return { err: 'This label (' + spec.w + ' x ' + spec.l + ' mm' + (spec.n > 1 ? ', ' + spec.n + ' on one' : '') + ') is too small for the roast label, even the short version. Use a larger label' + (spec.n > 1 ? ' or fewer labels on one' : '') + '.' };
+}
+function updateSizeInfo() {
+  const spec = getSpec(), plan = planLayout(spec), el = $('sizeInfo');
+  $('customBox').style.display = $('ltype').value === 'custom' ? '' : 'none';
+  if (plan.err) { el.className = 'bad'; el.textContent = plan.err; }
+  else {
+    el.className = '';
+    const from = spec.src === 'printer' ? ' (read from the printer)' : spec.src === 'default' ? ' (connect the printer to read the roll; using 50 x 30 until then)' : '';
+    el.textContent = 'Label ' + spec.w + ' x ' + spec.l + ' mm' + (spec.n > 1 ? ', ' + spec.n + ' on one' : '') + from + ' → ' + plan.lay.text;
+  }
+  updatePrintBtn();
+}
+
 // ---- drawing
 function render(L) {
-  const two = $('ltype').value === '2up', H = labelRows(); // 2-up: 78 mm of the 80 mm label; 1-up: 30 mm
-  const cv = $('cv'); cv.width = W; cv.height = H;
+  const spec = getSpec(), plan = planLayout(spec);
+  const rows = spec ? rowsFor(spec) : 240;
+  const cv = $('cv'); cv.width = W; cv.height = rows;
+  const f = cv.getContext('2d'); f.fillStyle = '#fff'; f.fillRect(0, 0, W, rows);
+  if (plan.err) { f.fillStyle = '#b00020'; f.font = 'bold 18px Arial'; f.fillText('Cannot print on this label size', 12, 30); return; }
   // draw at 3x, then downsample + hard black/white threshold = exactly what gets printed
-  const S = 3, big = document.createElement('canvas'); big.width = W * S; big.height = H * S;
+  const S = 3, big = document.createElement('canvas'); big.width = W * S; big.height = rows * S;
   const g = big.getContext('2d');
-  const lm = num('lm', 30), rm = num('rm', 4), sx = (W - lm - rm) / 384;
+  const lm = num('lm', 30), rm = num('rm', 4);
   g.fillStyle = '#fff'; g.fillRect(0, 0, big.width, big.height);
-  g.setTransform(S * sx, 0, 0, S, S * (lm - 8 * sx), 0); g.fillStyle = '#000'; g.strokeStyle = '#000';
   const fit = (t, wt, max, min, maxW) => { let s = max; do { g.font = wt + ' ' + s + 'px Arial'; s--; } while (g.measureText(t).width > maxW && s >= min); };
-  const drawOne = () => {
-  // title
-  fit(L.product, 'bold', 28, 12, 384); g.textAlign = 'left'; g.fillText(L.product, 8, 28);
-  fit(L.date, '', 22, 12, 150); const dw = g.measureText(L.date).width;
-  g.textAlign = 'right'; g.fillText(L.date, 392, 56);
-  fit(L.client, '', 22, 12, 384 - dw - 12); g.textAlign = 'left'; g.fillText(L.client, 8, 56);
-  g.fillRect(8, 62, 384, 4);
-  // table 2 x 5
-  const x0 = 8, y0 = 72, cw = 140, rh = 28;
-  g.lineWidth = 2; g.strokeRect(x0, y0, cw * 2, rh * 5);
-  g.beginPath(); g.moveTo(x0 + cw, y0); g.lineTo(x0 + cw, y0 + rh * 5);
-  for (let i = 1; i < 5; i++) { g.moveTo(x0, y0 + rh * i); g.lineTo(x0 + cw * 2, y0 + rh * i); }
-  g.stroke();
-  const left = ['PG: ' + L.pg, 'PR: ' + L.pr, 'PB: ' + L.pb, 'AG: ' + L.ag, 'Roaster: ' + L.roaster];
-  const right = ['Loc: ' + L.loc, 'W: ' + L.w, 'R: ' + L.r, null, 'Pr: ' + L.profile];
-  const cell = (t, cx, row) => { if (t === null) return; fit(t, '', 17, 9, cw - 8); g.textAlign = 'left'; g.fillText(t, cx + 4, y0 + rh * row + 19); };
-  left.forEach((t, i) => cell(t, x0, i)); right.forEach((t, i) => cell(t, x0 + cw, i));
-  // Hand / Color check boxes (row 4, right)
-  const by = y0 + rh * 3, bs = 14; g.font = '15px Arial'; g.textAlign = 'left';
-  const box = (label, x, on) => { g.fillText(label, x, by + 19); const bx = x + g.measureText(label).width + 3, byy = by + 7;
-    g.lineWidth = 2; g.strokeRect(bx, byy, bs, bs);
-    if (on) { g.beginPath(); g.moveTo(bx + 2, byy + 2); g.lineTo(bx + bs - 2, byy + bs - 2); g.moveTo(bx + bs - 2, byy + 2); g.lineTo(bx + 2, byy + bs - 2); g.stroke(); }
-    return bx + bs + 8; };
-  let nx = box('Hand', x0 + cw + 4, L.hand); box('Color', nx, L.color);
-  // logo
-  const lx = 296, ly = 72, lw = 96, lh = 140;
-  if (logoImg && logoImg.complete && logoImg.naturalWidth) {
-    const s = Math.min(lw / logoImg.naturalWidth, lh / logoImg.naturalHeight);
-    const iw = logoImg.naturalWidth * s, ih = logoImg.naturalHeight * s;
-    g.drawImage(logoImg, lx + (lw - iw) / 2, ly + (lh - ih) / 2, iw, ih);
-  } else { g.textAlign = 'center'; g.font = 'bold 36px Arial'; g.fillText('P|P', lx + lw / 2, ly + 70); g.font = '16px Arial'; g.fillText('Coffee', lx + lw / 2, ly + 95); }
-  // footer
-  g.textAlign = 'left'; g.font = '12px Arial'; g.fillText('PT Peach and Panda Group Indonesia', 8, 232);
+  const table = (x0, y0, cw, rh, cells, maxF) => {
+    const nc = cells[0].length, nr = cells.length;
+    g.lineWidth = 2; g.strokeRect(x0, y0, cw * nc, rh * nr); g.beginPath();
+    for (let c = 1; c < nc; c++) { g.moveTo(x0 + cw * c, y0); g.lineTo(x0 + cw * c, y0 + rh * nr); }
+    for (let r = 1; r < nr; r++) { g.moveTo(x0, y0 + rh * r); g.lineTo(x0 + cw * nc, y0 + rh * r); }
+    g.stroke(); g.textAlign = 'left';
+    cells.forEach((row, r) => row.forEach((t, c) => { if (t === null) return; fit(t, '', maxF, 9, cw - 8); g.fillText(t, x0 + cw * c + 4, y0 + rh * r + Math.round(rh * 0.68)); }));
   };
-  if (two) { [40, 360].forEach(dy => { g.save(); g.translate(0, dy); drawOne(); g.restore(); });
-    g.save(); g.lineWidth = 2; g.setLineDash([6, 5]); g.beginPath(); g.moveTo(8, 320); g.lineTo(392, 320); g.stroke(); g.restore(); }
-  else drawOne();
-  const f = cv.getContext('2d'); f.fillStyle = '#fff'; f.fillRect(0, 0, W, H);
-  f.imageSmoothingEnabled = true; f.imageSmoothingQuality = 'high'; f.drawImage(big, 0, 0, W, H);
-  const id = f.getImageData(0, 0, W, H), d = id.data, T = num('thr', 110);
+  const drawFull = () => {
+    // title
+    fit(L.product, 'bold', 28, 12, 384); g.textAlign = 'left'; g.fillText(L.product, 8, 28);
+    fit(L.date, '', 22, 12, 150); const dw = g.measureText(L.date).width;
+    g.textAlign = 'right'; g.fillText(L.date, 392, 56);
+    fit(L.client, '', 22, 12, 384 - dw - 12); g.textAlign = 'left'; g.fillText(L.client, 8, 56);
+    g.fillRect(8, 62, 384, 4);
+    // table 2 x 5
+    const x0 = 8, y0 = 72, cw = 140, rh = 28;
+    g.lineWidth = 2; g.strokeRect(x0, y0, cw * 2, rh * 5);
+    g.beginPath(); g.moveTo(x0 + cw, y0); g.lineTo(x0 + cw, y0 + rh * 5);
+    for (let i = 1; i < 5; i++) { g.moveTo(x0, y0 + rh * i); g.lineTo(x0 + cw * 2, y0 + rh * i); }
+    g.stroke();
+    const left = ['PG: ' + L.pg, 'PR: ' + L.pr, 'PB: ' + L.pb, 'AG: ' + L.ag, 'Roaster: ' + L.roaster];
+    const right = ['Loc: ' + L.loc, 'W: ' + L.w, 'R: ' + L.r, null, 'Pr: ' + L.profile];
+    const cell = (t, cx, row) => { if (t === null) return; fit(t, '', 17, 9, cw - 8); g.textAlign = 'left'; g.fillText(t, cx + 4, y0 + rh * row + 19); };
+    left.forEach((t, i) => cell(t, x0, i)); right.forEach((t, i) => cell(t, x0 + cw, i));
+    // Hand / Color check boxes (row 4, right)
+    const by = y0 + rh * 3, bs = 14; g.font = '15px Arial'; g.textAlign = 'left';
+    const box = (label, x, on) => { g.fillText(label, x, by + 19); const bx = x + g.measureText(label).width + 3, byy = by + 7;
+      g.lineWidth = 2; g.strokeRect(bx, byy, bs, bs);
+      if (on) { g.beginPath(); g.moveTo(bx + 2, byy + 2); g.lineTo(bx + bs - 2, byy + bs - 2); g.moveTo(bx + bs - 2, byy + 2); g.lineTo(bx + 2, byy + bs - 2); g.stroke(); }
+      return bx + bs + 8; };
+    let nx = box('Hand', x0 + cw + 4, L.hand); box('Color', nx, L.color);
+    // logo
+    const lx = 296, ly = 72, lw = 96, lh = 140;
+    if (logoImg && logoImg.complete && logoImg.naturalWidth) {
+      const s = Math.min(lw / logoImg.naturalWidth, lh / logoImg.naturalHeight);
+      const iw = logoImg.naturalWidth * s, ih = logoImg.naturalHeight * s;
+      g.drawImage(logoImg, lx + (lw - iw) / 2, ly + (lh - ih) / 2, iw, ih);
+    } else { g.textAlign = 'center'; g.font = 'bold 36px Arial'; g.fillText('P|P', lx + lw / 2, ly + 70); g.font = '16px Arial'; g.fillText('Coffee', lx + lw / 2, ly + 95); }
+    // footer
+    g.textAlign = 'left'; g.font = '12px Arial'; g.fillText('PT Peach and Panda Group Indonesia', 8, 232);
+  };
+  const drawShort = () => {
+    // one header line: product + client on the left, date on the right
+    fit(L.date, '', 20, 11, 140); const dw = g.measureText(L.date).width;
+    g.textAlign = 'right'; g.fillText(L.date, 392, 24);
+    const avail = 384 - dw - 12;
+    fit(L.product, 'bold', 24, 11, avail); g.textAlign = 'left'; g.fillText(L.product, 8, 24);
+    const pw = g.measureText(L.product).width, rest = avail - pw - 10;
+    if (L.client && rest > 40) { fit(L.client, '', 20, 10, rest); if (g.measureText(L.client).width <= rest) g.fillText(L.client, 8 + pw + 10, 24); }
+    g.fillRect(8, 30, 384, 3);
+    table(8, 38, 192, 30, [['PG: ' + L.pg, 'AG: ' + L.ag], ['PR: ' + L.pr, 'Loc: ' + L.loc], ['PB: ' + L.pb, 'W: ' + L.w]], 19);
+  };
+  const drawNarrow = () => {
+    fit(L.product, 'bold', 22, 10, 200); g.textAlign = 'left'; g.fillText(L.product, 8, 22);
+    let line2 = (L.client ? L.client + '  ' : '') + L.date; fit(line2, '', 17, 10, 200);
+    if (g.measureText(line2).width > 200) { line2 = L.date; fit(line2, '', 17, 10, 200); }
+    g.fillText(line2, 8, 44);
+    g.fillRect(8, 50, 200, 3);
+    table(8, 58, 200, 26, [['PG: ' + L.pg], ['PR: ' + L.pr], ['PB: ' + L.pb], ['AG: ' + L.ag], ['Loc: ' + L.loc], ['W: ' + L.w]], 18);
+  };
+  const draw = { full: drawFull, short: drawShort, narrow: drawNarrow }[plan.lay.id];
+  const portion = spec.l * MM / spec.n;
+  g.fillStyle = '#000'; g.strokeStyle = '#000';
+  for (let k = 0; k < spec.n; k++) {
+    const top = k * portion, avail = Math.min(portion, rows - top);
+    if (avail <= 0) break;
+    const oy = top + Math.max(0, (avail - plan.lay.DH * plan.ay) / 2);
+    g.setTransform(S * plan.ax, 0, 0, S * plan.ay, S * (lm - 8 * plan.ax), S * oy);
+    draw();
+  }
+  // cut lines between labels on one
+  g.setTransform(S, 0, 0, S, 0, 0); g.lineWidth = 2; g.setLineDash([6, 5]); g.beginPath();
+  for (let k = 1; k < spec.n; k++) { const y = Math.round(k * portion); g.moveTo(lm, y); g.lineTo(W - rm, y); }
+  g.stroke(); g.setLineDash([]);
+  f.imageSmoothingEnabled = true; f.imageSmoothingQuality = 'high'; f.drawImage(big, 0, 0, W, rows);
+  const id = f.getImageData(0, 0, W, rows), d = id.data, T = num('thr', 110);
   for (let i = 0; i < d.length; i += 4) { const v = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; d[i] = d[i + 1] = d[i + 2] = v < T ? 0 : 255; d[i + 3] = 255; }
   f.putImageData(id, 0, 0);
 }
-// Printed length in px (8 px per mm). The 2-up print used to be the full 80 mm (640 px), which made the
-// printer run on into the next label. 78 mm leaves a small safety margin; nothing is drawn below 75 mm.
-function labelRows() { return $('ltype').value === '2up' ? 624 : 240; }
 function num(id, def) { const v = parseFloat($(id).value); return isNaN(v) ? def : v; }
 
 // ---- load
@@ -221,28 +353,48 @@ $('load').onclick = async () => {
     updatePrintBtn();
   } catch (e) { $('status').textContent = 'Error: ' + e.message; }
 };
-$('ltype').value = store.get('pp_ltype') || '1up';
-// margins are stored per label type (the two rolls sit differently in the printer)
-const MARG = { '1up': { lm: 30, rm: 4 }, '2up': { lm: 2, rm: 56 } };
-// The printed width per label type stays the same; moving the left margin moves the whole print,
+
+// ---- label size + margins
+// The printed width per label size stays the same; moving the left margin moves the whole print,
 // and the right margin follows. Earlier tuning on this computer is kept.
-function widthFor(t) {
-  const w = store.get('pp_w_' + t); if (w !== null && !isNaN(+w)) return +w;
-  const ol = store.get('pp_lm_' + t), or = store.get('pp_rm_' + t);
+function defaultsFor(spec) {
+  const wide = spec.w * MM >= W;
+  return { lm: wide ? 30 : 2, width: Math.min(350, Math.round(spec.w * MM) - 34) };
+}
+function widthFor(spec) {
+  const k = specKey(spec), w = store.get('pp_w_' + k); if (w !== null && !isNaN(+w)) return +w;
+  const ol = store.get('pp_lm_' + k), or = store.get('pp_rm_' + k);
   if (ol !== null && or !== null && !isNaN(+ol) && !isNaN(+or)) return W - (+ol) - (+or);
-  return W - MARG[t].lm - MARG[t].rm;
+  return defaultsFor(spec).width;
 }
 function syncRight() {
-  const t = $('ltype').value, lm = Math.max(0, num('lm', MARG[t].lm)), w = widthFor(t), rm = W - lm - w;
+  const spec = getSpec(); if (!spec) return;
+  const lm = Math.max(0, num('lm', 0)), rm = W - lm - widthFor(spec);
   $('rm').value = Math.max(0, rm);
   $('rmNote').textContent = rm < 0 ? 'The left margin is larger than this label allows, so the print is squeezed slightly.' : '';
 }
-function loadMargins() { const t = $('ltype').value, s = store.get('pp_lm_' + t);
-  $('lm').value = s !== null ? s : MARG[t].lm; syncRight(); }
-loadMargins();
-$('ltype').addEventListener('change', () => { store.set('pp_ltype', $('ltype').value); loadMargins(); if (L) render(L); });
-$('lm').addEventListener('input', () => { const t = $('ltype').value;
-  store.set('pp_w_' + t, String(widthFor(t))); store.set('pp_lm_' + t, $('lm').value); syncRight(); if (L) render(L); });
+function loadMargins() {
+  const spec = getSpec(); if (!spec) return;
+  const s = store.get('pp_lm_' + specKey(spec));
+  $('lm').value = s !== null ? s : defaultsFor(spec).lm; syncRight();
+}
+function onSpecChange() { loadMargins(); updateSizeInfo(); if (L) render(L); }
+const savedType = store.get('pp_ltype');
+$('ltype').value = savedType === '1up' ? '50x30' : savedType === '2up' ? '45x80' : (savedType || 'auto');
+if (!$('ltype').value) $('ltype').value = 'auto';
+$('nup').value = $('ltype').value === '45x80' ? '2' : (store.get('pp_nup') || '1');
+$('csize').value = store.get('pp_csize') || '';
+$('ltype').addEventListener('change', () => {
+  const v = $('ltype').value; store.set('pp_ltype', v);
+  if (v === '50x30') $('nup').value = '1';
+  if (v === '45x80') $('nup').value = '2';
+  if (v === 'auto' && rollSpec) $('nup').value = rollSpec.w === 45 && rollSpec.l === 80 ? '2' : '1';
+  store.set('pp_nup', $('nup').value); onSpecChange();
+});
+$('nup').addEventListener('change', () => { store.set('pp_nup', $('nup').value); onSpecChange(); });
+$('csize').addEventListener('input', () => { store.set('pp_csize', $('csize').value); onSpecChange(); });
+$('lm').addEventListener('input', () => { const spec = getSpec(); if (!spec) return; const k = specKey(spec);
+  store.set('pp_w_' + k, String(widthFor(spec))); store.set('pp_lm_' + k, $('lm').value); syncRight(); updateSizeInfo(); if (L) render(L); });
 // other tuning fields: restore, save, re-render
 ['thr','density'].forEach(k => { const s = store.get('pp_'+k); if (s !== null) $(k).value = s;
   $(k).addEventListener('input', () => { store.set('pp_'+k, $(k).value); if (L) render(L); }); });
@@ -258,8 +410,34 @@ function setConn(state, text) {
   $('cdis').disabled = !client; updatePrintBtn();
 }
 function updatePrintBtn() {
-  $('print').disabled = !(L && isOn() && !printing);
-  $('printHint').textContent = printing ? '' : !L ? 'Load a label first (step 1).' : !isOn() ? 'Connect the printer first (step 3).' : 'Ready.';
+  const plan = planLayout(getSpec());
+  $('print').disabled = !(L && isOn() && !printing && !plan.err);
+  $('printHint').textContent = printing ? '' : !isOn() ? 'Connect the printer first (step 1).' : !L ? 'Load a label first (step 2).' : plan.err ? 'This label size is too small.' : 'Ready.';
+}
+// What the printer says about the loaded roll: size (if it reports it) and labels left (RFID tag).
+function readRoll(c) {
+  let info = null;
+  try { info = c.getRfidInfo ? c.getRfidInfo() : c.rfidInfo; } catch (_) {}
+  console.log('Roll info from printer', info);
+  const tag = info && info.labelRfidInfo, paper = info && info.paperInfo;
+  rollCode = tag && tag.tagPresent && tag.barCode ? tag.barCode : null;
+  let spec = null, how = '';
+  if (paper && paper.valid && paper.paperWidth > 0 && paper.totalHeight > 0) {
+    const len = paper.gapHeight > 0 && paper.totalHeight - paper.gapHeight > 5 ? paper.totalHeight - paper.gapHeight : paper.totalHeight;
+    spec = { w: Math.round(paper.paperWidth), l: Math.round(len) }; how = 'reported by the printer';
+  } else if (rollCode) {
+    const p = parseSize(store.get('pp_roll_' + rollCode));
+    if (p) { spec = p; how = 'remembered for this roll'; }
+  }
+  rollSpec = spec;
+  const left = tag && tag.tagPresent && tag.allPaper > 0 ? (tag.allPaper - tag.usedPaper) + ' of ' + tag.allPaper + ' labels left' : '';
+  let text;
+  if (!tag || !tag.tagPresent) text = spec ? 'Roll: ' + spec.w + ' x ' + spec.l + ' mm (' + how + ')' : 'No NIIMBOT roll detected. Pick the label size in step 2.';
+  else if (spec) text = 'Roll: ' + spec.w + ' x ' + spec.l + ' mm (' + how + ')' + (left ? ' · ' + left : '');
+  else text = 'Roll detected' + (left ? ' (' + left + ')' : '') + ', but the printer does not report its size. Pick the size in step 2 once; after the first print the page remembers it for this roll.';
+  $('roll').textContent = text;
+  if ($('ltype').value === 'auto' && spec) $('nup').value = spec.w === 45 && spec.l === 80 ? '2' : $('nup').value;
+  onSpecChange();
 }
 async function disconnectPrinter() {
   const c = client; client = null;
@@ -269,6 +447,7 @@ async function connectPrinter(mode) {
   const usb = mode === 'usb';
   if (usb && !('serial' in navigator)) return setConn('err', 'USB printing needs Google Chrome or Microsoft Edge on a computer.');
   if (!usb && !('bluetooth' in navigator)) return setConn('err', 'Bluetooth printing needs Google Chrome or Microsoft Edge, with Bluetooth switched on.');
+  beep([], 0); // unlock sound on this click
   await disconnectPrinter();
   const c = usb ? new niimbluelib.NiimbotSerialClient() : new niimbluelib.NiimbotBluetoothClient();
   let opts;
@@ -287,27 +466,31 @@ async function connectPrinter(mode) {
     const info = await c.connect(opts);
     client = c;
     if (usb) { try { const i = c.port.getInfo(); store.set('pp_usb', i.usbVendorId + ':' + i.usbProductId); } catch (_) {} }
-    c.on('disconnect', () => { if (client === c) { client = null;
+    c.on('disconnect', () => { if (client === c) { client = null; sound.lost();
       setConn('off', 'Printer disconnected (switched off, unplugged or out of range). Switch it on and click Connect again.'); } });
+    c.on('rfidinfofetched', () => { if (client === c) readRoll(c); });
     const name = usb ? 'B1 printer' : (info && info.deviceName) || 'B1 printer';
     setConn('on', 'Connected: ' + name + ' via ' + (usb ? 'USB' : 'Bluetooth'));
+    sound.connected();
+    readRoll(c);
   } catch (e) {
     console.error(e);
     try { await c.disconnect(); } catch (_) {}
     const msg = String((e && e.message) || e);
     if (/cancel|No port selected|No device selected|NotFoundError/i.test(msg) && !opts) setConn('off', 'No printer picked. Click Connect again when the printer is on.');
-    else if (opts) { skipRemembered = true; setConn('err', 'Could not reach the printer. Check it is on and plugged in, then click Connect USB again (a window will open).'); }
-    else setConn('err', 'Could not connect: ' + msg + '. Switch the printer off and on, then try again.');
+    else if (opts) { skipRemembered = true; sound.error(); setConn('err', 'Could not reach the printer. Check it is on and plugged in, then click Connect USB again (a window will open).'); }
+    else { sound.error(); setConn('err', 'Could not connect: ' + msg + '. Switch the printer off and on, then try again.'); }
   }
 }
 $('cbt').onclick = () => connectPrinter('bt');
 $('cusb').onclick = () => connectPrinter('usb');
-$('cdis').onclick = async () => { await disconnectPrinter(); setConn('off', 'Printer not connected'); };
+$('cdis').onclick = async () => { await disconnectPrinter(); $('roll').textContent = ''; setConn('off', 'Printer not connected'); };
 window.addEventListener('beforeunload', () => { try { client && client.disconnect(); } catch (_) {} });
 
 // ---- print (uses the open connection, so it starts right away)
 async function doPrint() {
-  if (!L || !isOn() || printing) return;
+  const spec = getSpec(), plan = planLayout(spec);
+  if (!L || !isOn() || printing || plan.err) return;
   L.product = $('product').value.trim(); L.ag = $('ag').value; render(L);
   const copies = Math.max(1, parseInt($('copies').value, 10) || 1);
   printing = true; updatePrintBtn(); $('status').textContent = 'Printing ' + copies + ' label(s)…';
@@ -319,7 +502,7 @@ async function doPrint() {
     const dir = 'top';
     const color = niimbluelib.PageColorType ? niimbluelib.PageColorType.SingleColor : 0;
     const encoded = niimbluelib.ImageEncoder.encodeCanvas($('cv'), color, dir);
-    if (encoded.rows !== labelRows()) throw new Error('Label image is ' + encoded.rows + ' px long but should be ' + labelRows() + ' px. Not printing, to avoid running into the next label.');
+    if (encoded.rows !== rowsFor(spec)) throw new Error('Label image is ' + encoded.rows + ' px long but should be ' + rowsFor(spec) + ' px. Not printing, to avoid running into the next label.');
     const gaps = niimbluelib.LabelType ? niimbluelib.LabelType.WithGaps : 1; // stop at the gap after each label
     const task = proto.newPrintTask(taskName, { labelType: gaps, totalPages: copies, statusPollIntervalMs: 100, statusTimeoutMs: 8000, pageColor: color, density: Math.min(5, Math.max(1, Math.round(num('density', 2)))) });
     try {
@@ -328,12 +511,16 @@ async function doPrint() {
       await task.waitForPageFinished();
       await task.waitForFinished();
       $('status').textContent = 'Printed ' + copies + ' label(s). The printer stays connected for the next one.';
+      sound.printed();
+      // remember the size for this roll, so "From the printer" finds it next time
+      if (rollCode && !rollSpec && $('ltype').value !== 'auto') { store.set('pp_roll_' + rollCode, spec.w + 'x' + spec.l); }
     } finally { try { await proto.printEnd(); } catch (_) {} }
   } catch (e) {
-    console.error(e);
+    console.error(e); sound.error();
     $('status').textContent = 'Print error: ' + (e.message || e) + (isOn() ? '' : '\nThe printer is no longer connected. Switch it on and click Connect again.');
   } finally { printing = false; if (!isOn() && client === c) { client = null; setConn('off', 'Printer not connected'); } updatePrintBtn(); }
 }
 $('print').onclick = doPrint;
-updatePrintBtn();
-</script></body></html>
+loadMargins(); updateSizeInfo();
+</script>
+</body></html>
