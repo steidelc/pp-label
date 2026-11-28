@@ -224,10 +224,13 @@ function planLayout(spec) {
   }
   return { err: 'This label (' + spec.w + ' x ' + spec.l + ' mm' + (spec.n > 1 ? ', ' + spec.n + ' on one' : '') + ') is too small for the roast label, even the short version. Use a larger label' + (spec.n > 1 ? ' or fewer labels on one' : '') + '.' };
 }
+// true when a size is picked by hand that differs from the roll in the printer
+function rollMismatch(spec) { return !!(rollSpec && spec && (spec.w !== rollSpec.w || spec.l !== rollSpec.l)); }
 function updateSizeInfo() {
   const spec = getSpec(), plan = planLayout(spec), el = $('sizeInfo');
   $('customBox').style.display = $('ltype').value === 'custom' ? '' : 'none';
   if (plan.err) { el.className = 'bad'; el.textContent = plan.err; }
+  else if (rollMismatch(spec)) { el.className = 'bad'; el.textContent = 'The printer has ' + rollSpec.w + ' x ' + rollSpec.l + ' mm labels loaded, but ' + spec.w + ' x ' + spec.l + ' mm is selected. Choose "From the printer", or change the roll.'; }
   else {
     el.className = '';
     const from = spec.src === 'printer' ? ' (read from the printer)' : spec.src === 'default' ? ' (connect the printer to read the roll; using 50 x 30 until then)' : '';
@@ -411,8 +414,9 @@ function setConn(state, text) {
 }
 function updatePrintBtn() {
   const plan = planLayout(getSpec());
-  $('print').disabled = !(L && isOn() && !printing && !plan.err);
-  $('printHint').textContent = printing ? '' : !isOn() ? 'Connect the printer first (step 1).' : !L ? 'Load a label first (step 2).' : plan.err ? 'This label size is too small.' : 'Ready.';
+  const mism = rollMismatch(getSpec());
+  $('print').disabled = !(L && isOn() && !printing && !plan.err && !mism);
+  $('printHint').textContent = printing ? '' : !isOn() ? 'Connect the printer first (step 1).' : !L ? 'Load a label first (step 2).' : plan.err ? 'This label size is too small.' : mism ? 'Label size does not match the roll in the printer.' : 'Ready.';
 }
 // What the printer says about the loaded roll: size (if it reports it) and labels left (RFID tag).
 function readRoll(c) {
@@ -436,7 +440,11 @@ function readRoll(c) {
   else if (spec) text = 'Roll: ' + spec.w + ' x ' + spec.l + ' mm (' + how + ')' + (left ? ' · ' + left : '');
   else text = 'Roll detected' + (left ? ' (' + left + ')' : '') + ', but the printer does not report its size. Pick the size in step 2 once; after the first print the page remembers it for this roll.';
   $('roll').textContent = text;
-  if ($('ltype').value === 'auto' && spec) $('nup').value = spec.w === 45 && spec.l === 80 ? '2' : $('nup').value;
+  if (spec) {
+    // the loaded roll decides the label size
+    $('ltype').value = 'auto'; store.set('pp_ltype', 'auto');
+    $('nup').value = spec.w === 45 && spec.l === 80 ? '2' : '1'; store.set('pp_nup', $('nup').value);
+  }
   onSpecChange();
 }
 async function disconnectPrinter() {
@@ -490,7 +498,7 @@ window.addEventListener('beforeunload', () => { try { client && client.disconnec
 // ---- print (uses the open connection, so it starts right away)
 async function doPrint() {
   const spec = getSpec(), plan = planLayout(spec);
-  if (!L || !isOn() || printing || plan.err) return;
+  if (!L || !isOn() || printing || plan.err || rollMismatch(spec)) return;
   L.product = $('product').value.trim(); L.ag = $('ag').value; render(L);
   const copies = Math.max(1, parseInt($('copies').value, 10) || 1);
   printing = true; updatePrintBtn(); $('status').textContent = 'Printing ' + copies + ' label(s)…';
